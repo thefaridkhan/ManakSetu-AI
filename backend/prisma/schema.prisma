@@ -1,0 +1,287 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CONSUMER
+  INDUSTRY_USER
+  ADMIN
+}
+
+enum DocumentStatus {
+  ACTIVE
+  AMENDED
+  REVISED
+  WITHDRAWN
+  DRAFT
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum SchemeType {
+  SCHEME_I_ISI_MARK
+  SCHEME_II_CRS
+  SCHEME_IV_FMCS
+  HALLMARKING
+  ECO_MARK
+  LABORATORY_RECOGNITION
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  passwordHash  String
+  name          String
+  role          Role           @default(CONSUMER)
+  organization  String?
+  industryType  String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  conversations Conversation[]
+  feedback      Feedback[]
+
+  @@map("users")
+}
+
+model Conversation {
+  id        String    @id @default(cuid())
+  userId    String?
+  user      User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  language  String    @default("en")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  messages  Message[]
+
+  @@map("conversations")
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String       // "user" | "assistant" | "system"
+  content        String       @db.LongText
+  language       String?      // "en" | "hi" | "hinglish"
+  intent         String?      // "STANDARDS_SEARCH" | "PRODUCT_COMPLIANCE" | "GRIEVANCE" | "GENERAL"
+  citations      Json?        // Array of citation references
+  confidence     Float?       // Grounding confidence score
+  createdAt      DateTime     @default(now())
+
+  feedback       Feedback[]
+
+  @@map("messages")
+}
+
+model Source {
+  id             String     @id @default(cuid())
+  name           String
+  url            String     @unique @db.VarChar(500)
+  sourceType     String     // "OFFICIAL_PORTAL", "QCO_GAZETTE", "MANUAL", "CATALOGUE"
+  publisher      String     @default("Bureau of Indian Standards")
+  copyrightInfo  String     @default("Crown copyright / BIS Permitted Public Repository")
+  isPermitted    Boolean    @default(true)
+  lastSyncedAt   DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  documents      Document[]
+
+  @@map("sources")
+}
+
+model Document {
+  id             String            @id @default(cuid())
+  sourceId       String
+  source         Source            @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  docIdentifier  String            @unique @db.VarChar(200) // e.g. "IS-10500-2012"
+  title          String            @db.VarChar(500)
+  category       String            // "CIVIL", "CHEMICAL", "FOOD", "ELECTRONICS", "TEXTILE"
+  currentVersion String            @default("1.0")
+  status         DocumentStatus    @default(ACTIVE)
+  isMandatoryQCO Boolean           @default(false)
+  qcoDate        DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  versions       DocumentVersion[]
+  chunks         DocumentChunk[]
+
+  @@index([category])
+  @@index([status])
+  @@map("documents")
+}
+
+model DocumentVersion {
+  id             String         @id @default(cuid())
+  documentId     String
+  document       Document       @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  versionTag     String         // e.g. "1.0", "1.1", "2012_Rev2"
+  contentHash    String         @db.VarChar(64) // SHA-256
+  status         DocumentStatus @default(ACTIVE)
+  amendmentNotes String?        @db.Text
+  gazetteRef     String?
+  effectiveDate  DateTime?
+  createdAt      DateTime       @default(now())
+
+  @@unique([documentId, versionTag])
+  @@map("document_versions")
+}
+
+model DocumentChunk {
+  id             String    @id @default(cuid())
+  documentId     String
+  document       Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  chunkIndex     Int
+  clauseRef      String?   @db.VarChar(100) // e.g. "Clause 4.2 - Heavy Metal Tolerances"
+  content        String    @db.LongText
+  tokenCount     Int       @default(0)
+  embedding      Json?     // Array of floats
+  metadata       Json?     // Category, Standard Number, Page, etc.
+  createdAt      DateTime  @default(now())
+
+  @@index([documentId])
+  @@index([clauseRef])
+  @@map("document_chunks")
+}
+
+model Standard {
+  id               String    @id @default(cuid())
+  isNumber         String    @unique @db.VarChar(100) // e.g. "IS 10500:2012"
+  standardNo       String    @db.VarChar(50)         // e.g. "10500"
+  year             Int                               // e.g. 2012
+  title            String    @db.VarChar(500)
+  hindiTitle       String?   @db.VarChar(500)
+  scope            String    @db.LongText
+  icsCode          String?   @db.VarChar(50)         // e.g. "13.060.20"
+  sector           String    @db.VarChar(100)        // e.g. "Water and Sanitation", "Steel", "Food"
+  isMandatoryQCO   Boolean   @default(false)
+  qcoNotification  String?   @db.VarChar(255)
+  gazetteDate      DateTime?
+  schemeType       SchemeType @default(SCHEME_I_ISI_MARK)
+  keyRequirements  Json?     // Array of core test/quality parameters
+  applicableProducts Json?   // Array of product names
+  sampleSize       String?
+  testingDays      Int?
+  amendmentsCount  Int       @default(0)
+  status           DocumentStatus @default(ACTIVE)
+  sourceUrl        String?   @db.VarChar(500)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([sector])
+  @@index([isMandatoryQCO])
+  @@index([isNumber])
+  @@map("standards")
+}
+
+model Product {
+  id               String    @id @default(cuid())
+  name             String    @db.VarChar(255)
+  category         String    @db.VarChar(100)
+  hsCode           String?   @db.VarChar(50)
+  applicableStandard String  @db.VarChar(100) // e.g. "IS 14543"
+  isMandatory      Boolean   @default(false)
+  scheme           SchemeType @default(SCHEME_I_ISI_MARK)
+  description      String?   @db.Text
+  testingLabs      Json?     // Recognised BIS Labs
+  estimatedFee     String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([category])
+  @@index([applicableStandard])
+  @@map("products")
+}
+
+model CertificationScheme {
+  id               String     @id @default(cuid())
+  schemeCode       SchemeType @unique
+  title            String     @db.VarChar(255)
+  hindiTitle       String?    @db.VarChar(255)
+  description      String     @db.LongText
+  eligibleEntities String     @db.Text
+  procedureSteps   Json       // Array of step objects { stepNo, title, description, timeEstimate }
+  requiredDocuments Json      // Array of required documents { docName, format, isMandatory }
+  portalUrl        String     @db.VarChar(500)
+  feeStructure     Json?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  @@map("certification_schemes")
+}
+
+model GrievanceGuide {
+  id               String    @id @default(cuid())
+  topic            String    @db.VarChar(255)
+  category         String    // "FAKE_ISI_MARK", "HALLMARK_FRAUD", "SUBSTANDARD_PRODUCT", "DELAYED_LICENSE"
+  description      String    @db.Text
+  stepsToReport    Json      // Step-by-step reporting guide
+  bisCareAppAction String    @db.Text
+  legalProvisions  String?   @db.Text
+  contactHelpline  String    @default("1800 11 1204")
+  onlinePortalUrl  String    @default("https://www.services.bis.gov.in")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@map("grievance_guides")
+}
+
+model IngestionJob {
+  id            String    @id @default(cuid())
+  jobType       String    // "SCHEDULED_SYNC", "MANUAL_INGESTION", "REINDEX_VECTORS"
+  status        JobStatus @default(PENDING)
+  totalSources  Int       @default(0)
+  processedDocs Int       @default(0)
+  newDocs       Int       @default(0)
+  updatedDocs   Int       @default(0)
+  failedDocs    Int       @default(0)
+  chunksCreated Int       @default(0)
+  errorMessage  String?   @db.Text
+  logs          Json?     // Array of log entries { timestamp, level, message }
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([status])
+  @@map("ingestion_jobs")
+}
+
+model Feedback {
+  id           String    @id @default(cuid())
+  userId       String?
+  user         User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  messageId    String?
+  message      Message?  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  rating       Int       // 1 = Thumbs Down, 5 = Thumbs Up
+  citationAccuracy Boolean? @default(true)
+  comment      String?   @db.Text
+  query        String?   @db.Text
+  createdAt    DateTime  @default(now())
+
+  @@map("feedback")
+}
+
+model RetrievalLog {
+  id           String    @id @default(cuid())
+  query        String    @db.Text
+  intent       String?
+  topSources   Json?
+  avgScore     Float?
+  latencyMs    Int
+  createdAt    DateTime  @default(now())
+
+  @@map("retrieval_logs")
+}
