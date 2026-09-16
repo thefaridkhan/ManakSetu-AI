@@ -40,12 +40,14 @@ export class SchemesService {
 
     const isMandatory = standard ? standard.isMandatoryQCO : true;
     const stdTitle = standard ? standard.title : `Standard Reference: ${input.standardNo}`;
-    const keyReqs = standard?.keyRequirements ? (standard.keyRequirements as string[]) : [];
+    const keyReqs = Array.isArray(standard?.keyRequirements) ? (standard.keyRequirements as string[]) : [];
+    const applicableProducts = Array.isArray(standard?.applicableProducts) ? (standard.applicableProducts as string[]) : [];
+    const defaultProduct = applicableProducts[0] || 'Specified Product';
 
     return {
       standardNo: standard?.isNumber || input.standardNo,
       title: stdTitle,
-      productName: input.productName || standard?.applicableProducts?.[0] || 'Specified Product',
+      productName: input.productName || defaultProduct,
       isMandatoryQCO: isMandatory,
       estimatedTimeline: standard?.testingDays ? `${standard.testingDays + 30} - ${standard.testingDays + 60} Days` : '45 - 90 Days',
       scale: input.scale || 'SMALL',
