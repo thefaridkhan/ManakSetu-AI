@@ -1,6 +1,7 @@
 {
   "name": "backend",
   "version": "1.0.0",
+  "type": "module",
   "description": "BIS Intelligent Assistant Express Backend with Prisma, RAG, and Vector Search",
   "main": "dist/index.js",
   "scripts": {

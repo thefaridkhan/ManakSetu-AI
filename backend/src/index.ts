@@ -71,12 +71,7 @@ app.use(errorHandler);
 
 const PORT = parseInt(env.PORT, 10) || 5000;
 
-async function startServer() {
-  await connectDB();
-  
-  // Start Cron Job
-  setupIngestionScheduler();
-
+function startServer() {
   const server = app.listen(PORT, '0.0.0.0', () => {
     logger.info(`=======================================================`);
     logger.info(`🏛️  BIS Intelligent Assistant REST API Server Running!`);
@@ -85,6 +80,18 @@ async function startServer() {
     logger.info(`🩺 Health Check: http://0.0.0.0:${PORT}/api/health`);
     logger.info(`🧠 AI Provider: ${env.AI_PROVIDER.toUpperCase()} (${env.GEMINI_MODEL})`);
     logger.info(`=======================================================`);
+
+    // Connect DB in background
+    connectDB().catch((err: any) => {
+      logger.error('Database connection error:', { error: err.message });
+    });
+
+    // Start Ingestion Cron Job
+    try {
+      setupIngestionScheduler();
+    } catch (err: any) {
+      logger.warn('Failed to start ingestion scheduler:', { error: err.message });
+    }
   });
 
   // Graceful Shutdown
