@@ -45,6 +45,24 @@ app.use((req, res, next) => {
   next();
 });
 
+// Health check and root endpoints
+app.get('/', (req, res) => {
+  res.json({
+    status: 'online',
+    message: 'Bureau of Indian Standards (BIS) Intelligent Assistant API',
+    version: '1.0.0',
+    endpoints: {
+      health: '/health',
+      apiHealth: '/api/health',
+      apiDocs: '/api'
+    }
+  });
+});
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
+
 // Mount Master API
 app.use('/api', apiRouter);
 
@@ -59,12 +77,12 @@ async function startServer() {
   // Start Cron Job
   setupIngestionScheduler();
 
-  const server = app.listen(PORT, () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     logger.info(`=======================================================`);
     logger.info(`🏛️  BIS Intelligent Assistant REST API Server Running!`);
-    logger.info(`🚀 Listening on http://localhost:${PORT}`);
-    logger.info(`📖 API Root: http://localhost:${PORT}/api`);
-    logger.info(`🩺 Health Check: http://localhost:${PORT}/api/health`);
+    logger.info(`🚀 Listening on http://0.0.0.0:${PORT}`);
+    logger.info(`📖 API Root: http://0.0.0.0:${PORT}/api`);
+    logger.info(`🩺 Health Check: http://0.0.0.0:${PORT}/api/health`);
     logger.info(`🧠 AI Provider: ${env.AI_PROVIDER.toUpperCase()} (${env.GEMINI_MODEL})`);
     logger.info(`=======================================================`);
   });
