@@ -16,6 +16,9 @@ export class EmbeddingService {
     }
   }
 
+  private geminiEmbeddingDisabled = false;
+  private openaiEmbeddingDisabled = false;
+
   /**
    * Generates a 768-dimensional or 1536-dimensional embedding vector
    */
@@ -23,18 +26,35 @@ export class EmbeddingService {
     const cleanText = text.replace(/\n+/g, ' ').trim();
 
     // 1. Try Gemini embedding if configured
-    if (this.geminiClient && env.AI_PROVIDER === 'gemini') {
-      try {
-        const model = this.geminiClient.getGenerativeModel({ model: 'text-embedding-004' });
-        const result = await model.embedContent(cleanText);
-        return result.embedding.values;
-      } catch (error: any) {
-        logger.warn('Gemini embedding failed, falling back to local deterministic embedding', { error: error.message });
+    if (this.geminiClient && env.AI_PROVIDER === 'gemini' && !this.geminiEmbeddingDisabled) {
+      const candidateModels = [
+        env.EMBEDDING_MODEL || 'gemini-embedding-001',
+        'gemini-embedding-001',
+        'embedding-001'
+      ];
+      const uniqueModels = [...new Set(candidateModels)];
+
+      for (const modelName of uniqueModels) {
+        try {
+          const model = this.geminiClient.getGenerativeModel({ model: modelName });
+          const result = await model.embedContent(cleanText);
+          if (result && result.embedding && result.embedding.values) {
+            return result.embedding.values;
+          }
+        } catch (error: any) {
+          // If model not found, try next candidate
+          if (modelName === uniqueModels[uniqueModels.length - 1]) {
+            if (!this.geminiEmbeddingDisabled) {
+              logger.warn('Gemini embedding failed, falling back to local deterministic embedding', { error: error.message });
+              this.geminiEmbeddingDisabled = true;
+            }
+          }
+        }
       }
     }
 
     // 2. Try OpenAI embedding if configured
-    if (this.openaiClient && (env.AI_PROVIDER === 'openai' || env.OPENAI_API_KEY)) {
+    if (this.openaiClient && (env.AI_PROVIDER === 'openai' || env.OPENAI_API_KEY) && !this.openaiEmbeddingDisabled) {
       try {
         const response = await this.openaiClient.embeddings.create({
           model: 'text-embedding-3-small',
@@ -42,7 +62,10 @@ export class EmbeddingService {
         });
         return response.data[0].embedding;
       } catch (error: any) {
-        logger.warn('OpenAI embedding failed, falling back to local deterministic embedding', { error: error.message });
+        if (!this.openaiEmbeddingDisabled) {
+          logger.warn('OpenAI embedding failed, falling back to local deterministic embedding', { error: error.message });
+          this.openaiEmbeddingDisabled = true;
+        }
       }
     }
 

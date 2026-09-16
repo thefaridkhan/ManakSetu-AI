@@ -21,7 +21,7 @@ const envSchema = z.object({
   OPENAI_MODEL: z.string().default('gpt-4o-mini'),
   
   // Vector search
-  EMBEDDING_MODEL: z.string().default('text-embedding-004'),
+  EMBEDDING_MODEL: z.string().default('gemini-embedding-001'),
   VECTOR_STORE_TYPE: z.string().default('embedded'),
   SIMILARITY_THRESHOLD: z.string().transform(v => parseFloat(v)).default('0.65'),
   TOP_K_RETRIEVAL: z.string().transform(v => parseInt(v, 10)).default('6'),

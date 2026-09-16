@@ -1,4 +1,4 @@
-import { prisma } from './config/db';
+import { prisma } from './config/prisma.js';
 
 async function check() {
   const standards = await prisma.standard.count();
@@ -8,7 +8,7 @@ async function check() {
   const chunks = await prisma.documentChunk.count();
   const topStandards = await prisma.standard.findMany({
     take: 5,
-    select: { code: true, title: true, isMandatory: true }
+    select: { isNumber: true, title: true, isMandatoryQCO: true }
   });
 
   console.log('=== DATABASE STATUS ===');
@@ -23,3 +23,4 @@ async function check() {
 check()
   .catch(console.error)
   .finally(() => prisma.$disconnect());
+
